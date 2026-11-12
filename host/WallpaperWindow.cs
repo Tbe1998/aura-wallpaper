@@ -169,6 +169,20 @@ namespace AuraWall
 
         public bool HostAlive => DesktopHost.IsAlive(HostHandle);
 
+        /// <summary>兜底：无法挂进桌面层时，退化为普通的无边框全屏窗口。</summary>
+        public void FallbackToFullscreenWindow()
+        {
+            try
+            {
+                var scr = Screen.PrimaryScreen.Bounds;
+                Bounds = new Rectangle(scr.Left, scr.Top, scr.Width, scr.Height);
+                Opacity = 1;
+                Show();
+                HostHandle = IntPtr.Zero;
+            }
+            catch (Exception ex) { Log.Write("退化显示失败：" + ex.Message); }
+        }
+
         public void Send(object payload)
         {
             try

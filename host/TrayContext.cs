@@ -52,12 +52,28 @@ namespace AuraWall
 
         /* ------------------------------------------------------------ 窗口生命周期 */
 
+        private bool _attachFailed;
+
         private void CreateWindow()
         {
             _win = new WallpaperWindow(_windowed);
             _win.Show();
             _win.InitializeAsync(QueryString());
-            if (!_windowed) _win.AttachToDesktop();
+            if (!_windowed && !_attachFailed)
+            {
+                if (!_win.AttachToDesktop())
+                {
+                    // 挂不上桌面层（Explorer 未运行 / 被安全软件拦截）时，退化成无边框全屏窗口，
+                    // 至少让画面能显示，同时在日志里说明原因。
+                    _attachFailed = true;
+                    Log.Write("无法挂到桌面层，退化为全屏窗口显示。");
+                    _win.FallbackToFullscreenWindow();
+                }
+            }
+            else if (!_windowed)
+            {
+                _win.FallbackToFullscreenWindow();
+            }
         }
 
         private string QueryString()
@@ -71,7 +87,7 @@ namespace AuraWall
 
         private void OnWatchdog(object sender, EventArgs e)
         {
-            if (_windowed) return;   // 预览窗口模式不挂桌面层，无需守护
+            if (_windowed || _attachFailed) return;   // 预览模式 / 退化模式不守护桌面层
             try
             {
                 if (_win == null || !_win.IsHandleCreated || !_win.HostAlive)

@@ -29,7 +29,8 @@ jobs:
           New-Item -ItemType Directory -Force $dst | Out-Null
           Copy-Item "dist\AURA\*" $dst -Recurse -Force
           Copy-Item "使用说明.txt" $dst -Force
-          if (Test-Path "docs") { Copy-Item "docs" $dst -Recurse -Force }
+          Get-ChildItem $dst -Filter *.pdb | Remove-Item -Force
+          Remove-Item (Join-Path $dst "aura.log") -ErrorAction SilentlyContinue
           Write-Output "--- 发布目录 ---"
           Get-ChildItem $dst | Select-Object Name, Length
           Write-Output "--- web ---"
