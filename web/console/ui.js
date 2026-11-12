@@ -153,6 +153,7 @@
 
   function renderEngine() {
     const e = NX.engine;
+    document.body.className = 'mode-' + e.key;
     $$('.eng-btn').forEach(b => b.classList.toggle('on', b.dataset.eng === e.key));
     $('#coreKicker').textContent = e.kicker;
     $('#coreTitle').innerHTML = e.title;

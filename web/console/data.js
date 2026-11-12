@@ -40,7 +40,7 @@
 
   const DEFAULTS = {
     scale: 1.0,
-    parts: 1200,
+    parts: 900,
     glow: 0.85,
     beat: 1.0,
     light: true,

@@ -65,6 +65,10 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 .eng-btn+.eng-btn{border-left:1px solid var(--line)}
 .eng-btn:hover{color:var(--txt)}
 .eng-btn.on{color:var(--hi);background:rgba(255,255,255,.055);box-shadow:inset 0 -1px 0 var(--accent)}
+.mode-bh .core-label,.mode-fusion .core-label,.mode-three .core-label,.mode-infer .core-label{
+  left:16px;top:12px;transform:none;text-align:left;opacity:.72}
+.mode-bh .core-title,.mode-fusion .core-title,.mode-three .core-title,.mode-infer .core-title{font-size:20px}
+.mode-bh .core-kicker,.mode-fusion .core-kicker,.mode-three .core-kicker,.mode-infer .core-kicker{font-size:7px;margin-bottom:4px}
 .hint{position:absolute;left:10px;bottom:4px;font-size:10px;color:var(--dim2);pointer-events:none}
 .offline-banner{position:absolute;left:50%;top:16px;transform:translateX(-50%);padding:6px 12px;font-size:11px;
   border:1px solid rgba(180,89,90,.45);background:rgba(180,89,90,.08);color:#e0a3a4;border-radius:2px;display:none}
