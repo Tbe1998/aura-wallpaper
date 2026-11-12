@@ -24,7 +24,7 @@ namespace AuraWall
             {
                 if (state != null)
                 {
-                    code = (state.Contains("\"scenes\":3") && state.Contains("\"scene\"")) ? 0 : 2;
+                    code = (state.Contains("scenes") && state.Contains("nebula") && state.Contains("time")) ? 0 : 2;
                     timer.Stop();
                     win.Close();
                 }
