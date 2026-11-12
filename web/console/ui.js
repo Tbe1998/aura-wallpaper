@@ -127,14 +127,14 @@
   function flash(i, kind) {
     const el = rcvEls[i];
     if (!el) return;
-    el.classList.remove('hit', 'crack', 'shear');
+    el.classList.remove('hit', 'crack', 'shear', 'scorch', 'peak');
     void el.offsetWidth;
     el.classList.add('hit');
     if (S.chan[i].over && S.settings.over) {
       el.classList.add(kind || 'crack');
       if (S.settings.autoFocus) { S.focus = i; renderFocus(); }
     }
-    setTimeout(() => el.classList.remove('hit', 'crack', 'shear'), 600);
+    setTimeout(() => el.classList.remove('hit', 'crack', 'shear', 'scorch', 'peak'), 620);
   }
 
   /* ------------------------------------------------------------ 引擎切换 */
@@ -326,7 +326,8 @@
   NX.on('sample', () => { renderReceivers(); });
   NX.on('ui', () => { renderEngine(); renderTheme(); renderReceivers(); });
   NX.on('arrival', d => {
-    const kind = NX.S.mode === 'bh' ? 'crack' : NX.S.mode === 'three' ? 'shear' : 'crack';
+    // 每种引擎的过载接收语言不同：碎裂 / 热蚀 / 引力剪切 / 算力洪峰
+    const kind = { bh: 'crack', fusion: 'scorch', three: 'shear', infer: 'peak' }[NX.S.mode] || 'crack';
     flash(d.ch, kind);
   });
   NX.on('fps', f => { $('#sbFps').textContent = 'FPS ' + f; });

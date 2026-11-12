@@ -100,6 +100,13 @@ button{font-family:inherit;color:inherit;background:none;border:none;cursor:poin
 @keyframes shear{0%{clip-path:inset(0 0 66% 0);transform:translateX(-4px)}33%{clip-path:inset(33% 0 33% 0);transform:translateX(4px)}
   66%{clip-path:inset(66% 0 0 0);transform:translateX(-2px)}100%{clip-path:none;transform:none}}
 .rcv.scorch{box-shadow:inset 0 0 22px rgba(240,170,110,.28)}
+.rcv.peak{animation:peak .5s ease}
+@keyframes peak{0%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.35)}100%{box-shadow:none}}
+/* 聚变引擎：过载时接收端持续受热 */
+.mode-fusion .rcv.over{box-shadow:inset 0 0 24px rgba(240,170,110,.20)}
+.mode-fusion .rcv.over .bar{background:#f0ae6e}
+/* 推理引擎：过载时寄存器压力 */
+.mode-infer .rcv.over{box-shadow:inset 0 0 18px rgba(120,190,220,.14)}
 .rcv.scorch .bar{background:#e9a86b}
 
 /* ---------------------------------------------------------------- 看板 */

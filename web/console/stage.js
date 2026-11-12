@@ -301,15 +301,18 @@
       const col = over ? mix(rgb(accent), [232, 168, 112], 0.55) : rgb(accent);
       const streamColor = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`;
 
-      for (const q of arr) {
+      const stride = style === 'refraction' ? 3 : 1;
+      for (let qi = 0; qi < arr.length; qi++) {
+        const q = arr[qi];
         q.t += speed * dt * (0.8 + q.size * 0.25);
+        if (stride > 1 && qi % stride !== 0) { if (q.t >= 1) q.t -= 1; continue; }
         if (q.t >= 1) {
           q.t -= 1;
           if (Math.random() < 0.35) arrivals.push({ i, t: 0 });
         }
         const pt = pathPoint(p, q.t);
         const spread = (1 - q.t * 0.35) * 3.2 * q.jitter;
-        const fade = Math.sin(Math.min(1, q.t / 0.08) * Math.PI / 2) * (1 - q.t * 0.15);
+        const fade = Math.sin(Math.min(1, q.t / 0.10) * Math.PI / 2) * (1 - Math.max(0, (q.t - 0.75) / 0.25)) * 0.95;
 
         if (style === 'refraction') {
           // 空间折射：细亮边 + 半透明扰动
@@ -470,75 +473,157 @@
   };
 
   /* ------------------------------------------------------------------ 3. 聚变 */
-  const fusion = { gran: [] };
+  const fusion = { cells: [], small: [], rays: [], prom: [], flare: 0, nextFlare: 2000 };
   function initFusion() {
-    fusion.gran.length = 0;
-    for (let i = 0; i < 160; i++) {
-      fusion.gran.push({
-        a: Math.random() * TAU, r: Math.random(), s: 0.5 + Math.random() * 2.4,
-        w: 0.4 + Math.random() * 1.4, ph: Math.random() * TAU
-      });
+    fusion.cells = []; fusion.small = []; fusion.rays = []; fusion.prom = [];
+    for (let i = 0; i < 110; i++) {
+      const a = Math.random() * TAU, r = Math.sqrt(Math.random());
+      fusion.cells.push({ a, r, s: 1.6 + Math.random() * 4.2, w: 0.08 + Math.random() * 0.22, ph: Math.random() * TAU, hot: 0.35 + Math.random() * 0.65 });
     }
+    for (let i = 0; i < 170; i++) {
+      const a = Math.random() * TAU, r = Math.sqrt(Math.random());
+      fusion.small.push({ a, r, s: 0.5 + Math.random() * 1.5, w: 0.22 + Math.random() * 0.5, ph: Math.random() * TAU });
+    }
+    for (let i = 0; i < 34; i++) fusion.rays.push({ a: Math.random() * TAU, len: 0.35 + Math.random() * 0.95, w: 0.4 + Math.random() * 1.3, sp: 0.02 + Math.random() * 0.05 });
+    for (let i = 0; i < 3; i++) fusion.prom.push({ a: -0.9 + i * 1.15, h: 0.5 + Math.random() * 0.6, ph: i * 2.1, w: 0.55 + Math.random() * 0.4 });
   }
+
   const fusionEngine = {
     draw(dt, now, accent) {
       const g = geo();
       drawRing(now, accent, null);
       const cx = g.cx, cy = g.cy;
-      const R = g.R * 0.075;              // 主体直径约为巨环直径的 7%
+      const R = g.R * 0.085;                  // 主体直径 ≈ 巨环直径的 7%
       const glow = NX.S.settings.glow;
 
-      // 日冕
-      const corona = ctx.createRadialGradient(cx, cy, R * 0.7, cx, cy, R * 5.2);
-      corona.addColorStop(0, `rgba(255,190,120,${0.30 * glow})`);
-      corona.addColorStop(0.35, `rgba(255,140,70,${0.14 * glow})`);
-      corona.addColorStop(1, 'rgba(255,120,40,0)');
-      ctx.fillStyle = corona;
-      ctx.beginPath(); ctx.arc(cx, cy, R * 5.2, 0, TAU); ctx.fill();
+      /* 日冕：放射性长辉 + 缓慢旋转的冕流 */
+      const halo = ctx.createRadialGradient(cx, cy, R * 0.85, cx, cy, R * 6.0);
+      halo.addColorStop(0, `rgba(255,186,112,${0.26 * glow})`);
+      halo.addColorStop(0.22, `rgba(255,140,64,${0.12 * glow})`);
+      halo.addColorStop(0.6, `rgba(210,90,40,${0.035 * glow})`);
+      halo.addColorStop(1, 'rgba(180,60,20,0)');
+      ctx.fillStyle = halo;
+      ctx.beginPath(); ctx.arc(cx, cy, R * 6.0, 0, TAU); ctx.fill();
 
-      // 球体
+      for (const ray of fusion.rays) {
+        ray.a += dt * ray.sp;
+        const a0 = ray.a, len = R * (1.15 + ray.len * 1.5) * (0.92 + 0.08 * Math.sin(now * 0.0009 + a0 * 7));
+        const grd = ctx.createLinearGradient(
+          cx + Math.cos(a0) * R, cy + Math.sin(a0) * R,
+          cx + Math.cos(a0) * len, cy + Math.sin(a0) * len);
+        grd.addColorStop(0, `rgba(255,196,132,${0.20 * glow})`);
+        grd.addColorStop(1, 'rgba(255,150,80,0)');
+        ctx.strokeStyle = grd;
+        ctx.lineWidth = ray.w;
+        ctx.beginPath();
+        ctx.moveTo(cx + Math.cos(a0) * R * 1.01, cy + Math.sin(a0) * R * 1.01);
+        ctx.lineTo(cx + Math.cos(a0) * len, cy + Math.sin(a0) * len);
+        ctx.stroke();
+      }
+
+      /* 日珥：从边缘拱起的等离子弧 */
+      for (const pr of fusion.prom) {
+        const pulse = 0.55 + 0.45 * Math.sin(now * 0.0007 + pr.ph);
+        const a = pr.a + Math.sin(now * 0.00035 + pr.ph) * 0.08;
+        const p0x = cx + Math.cos(a - pr.w * 0.5) * R, p0y = cy + Math.sin(a - pr.w * 0.5) * R;
+        const p1x = cx + Math.cos(a + pr.w * 0.5) * R, p1y = cy + Math.sin(a + pr.w * 0.5) * R;
+        const peak = R * (1.25 + pr.h * 0.9) * (0.8 + 0.2 * pulse);
+        const cxp = cx + Math.cos(a) * peak, cyp = cy + Math.sin(a) * peak;
+        ctx.beginPath();
+        ctx.moveTo(p0x, p0y);
+        ctx.quadraticCurveTo(cxp, cyp, p1x, p1y);
+        ctx.strokeStyle = `rgba(255,150,96,${0.30 * pulse * glow})`;
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+        ctx.strokeStyle = `rgba(255,214,170,${0.16 * pulse * glow})`;
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      }
+
+      /* 球体 */
       ctx.save();
       ctx.beginPath(); ctx.arc(cx, cy, R, 0, TAU); ctx.clip();
-      const body = ctx.createRadialGradient(cx - R * 0.25, cy - R * 0.25, R * 0.1, cx, cy, R);
-      body.addColorStop(0, '#fffdf2');
-      body.addColorStop(0.35, '#ffd27a');
-      body.addColorStop(0.72, '#f2803c');
-      body.addColorStop(1, '#a3341c');
-      ctx.fillStyle = body; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
 
-      // 表面颗粒/活跃区
-      for (const n of fusion.gran) {
-        n.a += dt * n.w * 0.35;
+      const body = ctx.createRadialGradient(cx - R * 0.22, cy - R * 0.26, R * 0.05, cx, cy, R * 1.02);
+      body.addColorStop(0, '#fffdf4');
+      body.addColorStop(0.28, '#ffe3a3');
+      body.addColorStop(0.55, '#ffb055');
+      body.addColorStop(0.80, '#ec6d28');
+      body.addColorStop(1, '#8e2a12');
+      ctx.fillStyle = body;
+      ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
+      // 米粒组织（大对流胞）
+      for (const n of fusion.cells) {
+        n.a += dt * n.w * 0.12;
         const rr = Math.sqrt(n.r) * R;
-        const x = cx + Math.cos(n.a + now * 0.0002) * rr;
-        const y = cy + Math.sin(n.a - now * 0.00015) * rr * 0.92;
-        const heat = 0.35 + 0.65 * Math.abs(Math.sin(now * 0.001 * n.w + n.ph));
+        const x = cx + Math.cos(n.a) * rr;
+        const y = cy + Math.sin(n.a) * rr * 0.94;
+        const limb = 1 - Math.pow(n.r, 3) * 0.55;          // 边缘压暗
+        const heat = n.hot * (0.55 + 0.45 * Math.sin(now * 0.0012 * (0.5 + n.w) + n.ph));
         ctx.beginPath();
-        ctx.arc(x, y, n.s * (0.6 + heat * 0.8), 0, TAU);
-        ctx.fillStyle = `rgba(255,${180 + 50 * heat | 0},${90 + 90 * heat | 0},${0.10 + heat * 0.22})`;
+        ctx.arc(x, y, n.s * (0.7 + heat * 0.5), 0, TAU);
+        ctx.fillStyle = `rgba(255,${(196 + 50 * heat) | 0},${(110 + 100 * heat) | 0},${(0.10 + heat * 0.20) * limb})`;
+        ctx.fill();
+      }
+      // 细颗粒
+      for (const n of fusion.small) {
+        n.a += dt * n.w * 0.2;
+        const rr = Math.sqrt(n.r) * R;
+        const x = cx + Math.cos(n.a) * rr;
+        const y = cy + Math.sin(n.a) * rr * 0.94;
+        ctx.beginPath();
+        ctx.arc(x, y, n.s, 0, TAU);
+        ctx.fillStyle = `rgba(255,238,196,${0.10 * (1 - n.r * 0.7)})`;
         ctx.fill();
       }
 
-      // 日冕亮边
-      ctx.beginPath();
-      ctx.arc(cx, cy, R * 0.99, 0, TAU);
-      ctx.strokeStyle = 'rgba(255,228,178,.55)';
-      ctx.lineWidth = 1.6;
-      ctx.stroke();
+      // 中心炽白核
+      const core = ctx.createRadialGradient(cx, cy, 0, cx, cy, R * 0.55);
+      core.addColorStop(0, 'rgba(255,255,248,.55)');
+      core.addColorStop(1, 'rgba(255,240,200,0)');
+      ctx.fillStyle = core;
+      ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
+      // 临边昏暗
+      const limbG = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, R);
+      limbG.addColorStop(0, 'rgba(0,0,0,0)');
+      limbG.addColorStop(1, 'rgba(60,10,0,.55)');
+      ctx.fillStyle = limbG;
+      ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
       ctx.restore();
 
-      // 局部喷发
-      const ph = (now * 0.00013) % 1;
-      if (ph < 0.22) {
-        const a = -2.2 + ph * 3.4;
-        const len = R * (1.5 + ph * 5);
+      // 色球亮边
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 0.995, 0, TAU);
+      ctx.strokeStyle = `rgba(255,226,176,${0.55 * glow})`;
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 1.03, 0, TAU);
+      ctx.strokeStyle = `rgba(255,150,90,${0.18 * glow})`;
+      ctx.lineWidth = 3;
+      ctx.stroke();
+
+      /* 局部耀斑：每 6~9 秒一次 */
+      if (now > fusion.nextFlare) {
+        fusion.flare = 1;
+        fusion.nextFlare = now + 6000 + Math.random() * 3000;
+      }
+      if (fusion.flare > 0.01) {
+        fusion.flare *= Math.pow(0.12, dt);
+        const a = -1.4 + Math.sin(now * 0.0004) * 0.8;
+        const len = R * (1.4 + 2.6 * (1 - fusion.flare));
+        const fx = cx + Math.cos(a) * R * 0.9, fy = cy + Math.sin(a) * R * 0.9;
+        const grd = ctx.createLinearGradient(fx, fy, cx + Math.cos(a) * len, cy + Math.sin(a) * len);
+        grd.addColorStop(0, `rgba(255,246,220,${0.55 * fusion.flare * glow})`);
+        grd.addColorStop(1, 'rgba(255,170,90,0)');
+        ctx.strokeStyle = grd;
+        ctx.lineWidth = 3 + 6 * fusion.flare;
         ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(a) * R * 0.95, cy + Math.sin(a) * R * 0.95);
-        ctx.quadraticCurveTo(
-          cx + Math.cos(a - 0.15) * len * 0.7, cy + Math.sin(a - 0.15) * len * 0.7,
-          cx + Math.cos(a - 0.25) * len, cy + Math.sin(a - 0.25) * len);
-        ctx.strokeStyle = `rgba(255,196,130,${0.5 * (1 - ph / 0.22)})`;
-        ctx.lineWidth = 2.4 * (1 - ph / 0.22) + 0.4;
+        ctx.moveTo(fx, fy);
+        ctx.quadraticCurveTo(cx + Math.cos(a - 0.22) * len * 0.6, cy + Math.sin(a - 0.22) * len * 0.6,
+          cx + Math.cos(a - 0.3) * len, cy + Math.sin(a - 0.3) * len);
         ctx.stroke();
       }
 
@@ -547,83 +632,178 @@
   };
 
   /* ------------------------------------------------------------------ 4. 三体 */
-  const three = { bodies: [], trails: [], init: false, hist: [] };
-  function initThree() {
-    three.bodies = [
-      { x: -0.34, y: 0.06, vx: 0.05, vy: 0.16, m: 1.0 },
-      { x: 0.30, y: -0.12, vx: -0.12, vy: -0.10, m: 0.85 },
-      { x: 0.04, y: 0.30, vx: 0.08, vy: -0.13, m: 0.7 }
+  // 采用经典「8 字形」三体解（Chenciner–Montgomery）离线积分一次，
+  // 之后循环播放——稳定、三条轨迹各不相同，也不会甩出画面。
+  const three = { frames: [], ghost: [[], [], []], idx: 0, built: false, dust: [], burst: [], lastClose: 0, trail: 420 };
+
+  function buildFigureEight() {
+    const p = [
+      { x: -0.97000436, y: 0.24308753 },
+      { x: 0.97000436, y: -0.24308753 },
+      { x: 0, y: 0 }
     ];
-    three.trails = three.bodies.map(() => []);
-    three.init = true;
+    const v = [
+      { x: 0.4662036850, y: 0.4323657300 },
+      { x: 0.4662036850, y: 0.4323657300 },
+      { x: -0.93240737, y: -0.86473146 }
+    ];
+
+    const dt = 0.0004, soft = 1e-3;
+    const steps = Math.round(6.3259 / dt);      // 一个完整周期
+    three.frames = [];
+
+    const accel = (i) => {
+      let ax = 0, ay = 0;
+      for (let j = 0; j < 3; j++) {
+        if (i === j) continue;
+        const dx = p[j].x - p[i].x, dy = p[j].y - p[i].y;
+        const d2 = dx * dx + dy * dy + soft;
+        const f = 1 / (d2 * Math.sqrt(d2));
+        ax += dx * f; ay += dy * f;
+      }
+      return { x: ax, y: ay };
+    };
+
+    for (let k = 0; k < steps; k++) {
+      // 速度 Verlet
+      const a0 = [accel(0), accel(1), accel(2)];
+      for (let i = 0; i < 3; i++) {
+        p[i].x += v[i].x * dt + 0.5 * a0[i].x * dt * dt;
+        p[i].y += v[i].y * dt + 0.5 * a0[i].y * dt * dt;
+      }
+      const a1 = [accel(0), accel(1), accel(2)];
+      for (let i = 0; i < 3; i++) {
+        v[i].x += 0.5 * (a0[i].x + a1[i].x) * dt;
+        v[i].y += 0.5 * (a0[i].y + a1[i].y) * dt;
+      }
+      if (k % 4 === 0) {
+        three.frames.push([
+          { x: p[0].x, y: p[0].y },
+          { x: p[1].x, y: p[1].y },
+          { x: p[2].x, y: p[2].y }
+        ]);
+      }
+    }
+    // 整条 8 字轨道的淡影，保证轮廓始终可辨
+    three.ghost = [[], [], []];
+    for (let k = 0; k < three.frames.length; k += 22) {
+      for (let i = 0; i < 3; i++) three.ghost[i].push(three.frames[k][i]);
+    }
+
+    three.dust = [];
+    for (let i = 0; i < 70; i++) {
+      const a = Math.random() * TAU, r = 0.45 + Math.random() * 0.55;
+      three.dust.push({ a, r, s: 0.5 + Math.random() * 1.2, w: 0.3 + Math.random() * 1.1, ph: Math.random() * TAU });
+    }
+    three.built = true;
   }
+
   const threeEngine = {
     draw(dt, now, accent) {
       const g = geo();
       drawRing(now, accent, null);
-      if (!three.init) initThree();
+      if (!three.built) buildFigureEight();
       const glow = NX.S.settings.glow;
-      const scale = g.R * 0.9;
+      const scale = g.R * 0.62;
 
-      // 软化引力积分（固定时间步，稳定优先）
-      const steps = 3, h = Math.min(dt, 0.033) / steps, soft = 0.04;
-      for (let s = 0; s < steps; s++) {
-        for (let i = 0; i < 3; i++) {
-          let ax = 0, ay = 0;
-          for (let j = 0; j < 3; j++) {
-            if (i === j) continue;
-            const dx = three.bodies[j].x - three.bodies[i].x;
-            const dy = three.bodies[j].y - three.bodies[i].y;
-            const d2 = dx * dx + dy * dy + soft;
-            const f = three.bodies[j].m / (d2 * Math.sqrt(d2)) * 0.06;
-            ax += dx * f; ay += dy * f;
-          }
-          three.bodies[i].vx += ax * h * 60;
-          three.bodies[i].vy += ay * h * 60;
-        }
-        for (const b of three.bodies) {
-          b.x += b.vx * h; b.y += b.vy * h;
-          // 柔和边界，避免飞走
-          const d = Math.hypot(b.x, b.y);
-          if (d > 0.92) { b.vx *= 0.985; b.vy *= 0.985; }
-        }
-      }
-
-      // 轨迹
-      three.trails.forEach((tr, i) => {
-        const b = three.bodies[i];
-        if (!tr.length || Math.hypot(tr[tr.length - 1].x - b.x, tr[tr.length - 1].y - b.y) > 0.004)
-          tr.push({ x: b.x, y: b.y });
-        if (tr.length > 150) tr.shift();
-      });
+      // 播放轨迹（约 12 秒一圈）
+      const n = three.frames.length;
+      three.idx = (three.idx + dt * n / 15) % n;
+      const cur = three.frames[Math.floor(three.idx) % n];
 
       ctx.save();
       ctx.translate(g.cx, g.cy);
-      for (let i = 0; i < 3; i++) {
-        const tr = three.trails[i];
-        for (let k = 1; k < tr.length; k++) {
-          const a = (k / tr.length) * 0.35 * glow;
-          ctx.beginPath();
-          ctx.moveTo(tr[k - 1].x * scale, tr[k - 1].y * scale);
-          ctx.lineTo(tr[k].x * scale, tr[k].y * scale);
-          ctx.strokeStyle = rgba(accent, a);
-          ctx.lineWidth = 0.9;
-          ctx.stroke();
-        }
+
+      // 尘埃
+      for (const d of three.dust) {
+        d.a += dt * d.w * 0.22;
+        const x = Math.cos(d.a + Math.sin(now * 0.0002 + d.ph) * 0.4) * d.r * scale * 1.6;
+        const y = Math.sin(d.a + Math.cos(now * 0.00017 + d.ph) * 0.35) * d.r * scale * 1.5;
+        ctx.fillStyle = rgba(accent, 0.07 + 0.10 * Math.abs(Math.sin(now * 0.001 + d.ph)));
+        ctx.beginPath(); ctx.arc(x, y, d.s * 0.8, 0, TAU); ctx.fill();
       }
-      // 核心
+
+      // 整条 8 字轮廓的极淡底影
       for (let i = 0; i < 3; i++) {
-        const b = three.bodies[i];
-        const x = b.x * scale, y = b.y * scale;
-        const rad = 5 + b.m * 3;
-        const gr = ctx.createRadialGradient(x, y, 0, x, y, rad * 3);
-        gr.addColorStop(0, rgba(accent, 0.9));
-        gr.addColorStop(0.3, rgba(accent, 0.35));
+        ctx.beginPath();
+        three.ghost[i].forEach((f, k) => {
+          const x = f.x * scale, y = f.y * scale;
+          k === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.strokeStyle = rgba(accent, 0.045 * glow);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+
+      // 轨迹：整条折线一次描边，再叠一段更亮的近端尾迹
+      for (let i = 0; i < 3; i++) {
+        const L = three.trail, base = Math.floor(three.idx), n2 = n;
+        ctx.beginPath();
+        for (let k = 0; k < L; k += 5) {
+          const f = three.frames[((base - k) % n2 + n2) % n2][i];
+          const x = f.x * scale, y = f.y * scale;
+          k === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = rgba(accent, 0.30 * glow);
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+
+        ctx.beginPath();
+        for (let k = 0; k < 90; k += 2) {
+          const f = three.frames[((base - k) % n2 + n2) % n2][i];
+          const x = f.x * scale, y = f.y * scale;
+          k === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        }
+        ctx.strokeStyle = rgba(accent, 0.55 * glow);
+        ctx.lineWidth = 1.6;
+        ctx.stroke();
+      }
+
+      // 三个核心
+      for (let i = 0; i < 3; i++) {
+        const x = cur[i].x * scale, y = cur[i].y * scale;
+        const rad = 7 + i * 0.6;
+        const gr = ctx.createRadialGradient(x, y, 0, x, y, rad * 3.0);
+        gr.addColorStop(0, rgba(accent, 0.95));
+        gr.addColorStop(0.16, rgba(accent, 0.5));
+        gr.addColorStop(0.55, rgba(accent, 0.10));
         gr.addColorStop(1, rgba(accent, 0));
         ctx.fillStyle = gr;
-        ctx.beginPath(); ctx.arc(x, y, rad * 3, 0, TAU); ctx.fill();
-        ctx.beginPath(); ctx.arc(x, y, rad * 0.45, 0, TAU);
-        ctx.fillStyle = '#fff'; ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, rad * 3.0, 0, TAU); ctx.fill();
+
+        ctx.beginPath(); ctx.arc(x, y, rad * 0.62, 0, TAU);
+        ctx.fillStyle = 'rgba(8,11,16,.9)';
+        ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, rad * 0.62, 0, TAU);
+        ctx.strokeStyle = rgba(accent, 0.9);
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+        ctx.beginPath(); ctx.arc(x, y, 1.4, 0, TAU);
+        ctx.fillStyle = '#fff';
+        ctx.fill();
+      }
+
+      // 近距离交会：能量交换环 + 一次弹射到接收端
+      const d01 = Math.hypot(cur[0].x - cur[1].x, cur[0].y - cur[1].y);
+      const d02 = Math.hypot(cur[0].x - cur[2].x, cur[0].y - cur[2].y);
+      const d12 = Math.hypot(cur[1].x - cur[2].x, cur[1].y - cur[2].y);
+      const dmin = Math.min(d01, d02, d12);
+      if (dmin < 0.22 && now - three.lastClose > 900) {
+        three.lastClose = now;
+        const mid = { x: (cur[0].x + cur[1].x + cur[2].x) / 3 * scale, y: (cur[0].y + cur[1].y + cur[2].y) / 3 * scale };
+        three.burst.push({ x: mid.x, y: mid.y, t: 0 });
+        NX.emit('arrival', { ch: (Math.random() * 5) | 0 });
+      }
+
+      for (let i = three.burst.length - 1; i >= 0; i--) {
+        const b = three.burst[i];
+        b.t += dt;
+        if (b.t > 0.9) { three.burst.splice(i, 1); continue; }
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 12 + b.t * 110, 0, TAU);
+        ctx.strokeStyle = rgba(accent, 0.40 * (1 - b.t / 0.9));
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
       }
       ctx.restore();
 
@@ -632,110 +812,183 @@
   };
 
   /* ------------------------------------------------------------------ 5. 推理网络 */
-  const infer = { layers: [], nodes: [], tasks: [], cache: [] };
+  const infer = { layers: [], adj: [], tasks: [], branch: [], cache: [], built: false };
+  const INFER_LABELS = ['输入编码', '注意力', '并行分支', '路径筛选', '汇合', '输出'];
   function initInfer() {
     const counts = [5, 11, 15, 15, 11, 5];
     infer.layers = [];
-    infer.nodes = [];
-    let y0 = 0;
-    const totalW = 1;
     counts.forEach((n, li) => {
-      const x = li / (counts.length - 1);
       const arr = [];
-      for (let i = 0; i < n; i++) {
-        const y = n === 1 ? 0 : (i / (n - 1) - 0.5);
-        const node = { x, y, li, i, act: 0 };
-        arr.push(node);
-        infer.nodes.push(node);
-      }
+      for (let i = 0; i < n; i++) arr.push({ y: n === 1 ? 0 : (i / (n - 1) - 0.5), li, i });
       infer.layers.push(arr);
     });
+    // 稀疏连接：每个节点连到下一层的 3 个邻近节点
+    infer.adj = [];
+    for (let li = 0; li < infer.layers.length - 1; li++) {
+      const A = infer.layers[li], B = infer.layers[li + 1];
+      const map = [];
+      A.forEach((a, ai) => {
+        const center = Math.round((ai / Math.max(1, A.length - 1)) * (B.length - 1));
+        const list = [];
+        for (let k = -1; k <= 1; k++) {
+          const idx = Math.max(0, Math.min(B.length - 1, center + k));
+          if (list.indexOf(idx) < 0) list.push(idx);
+        }
+        map.push(list);
+      });
+      infer.adj.push(map);
+    }
+    infer.built = true;
   }
+
   const inferEngine = {
     draw(dt, now, accent) {
       const g = geo();
       drawRing(now, accent, null);
-      if (!infer.layers.length) initInfer();
+      if (!infer.built) initInfer();
       const glow = NX.S.settings.glow;
-      const W2 = Math.min(W * 0.52, g.R * 2.2);
-      const cx = g.cx + g.R * 0.55, cy = g.cy;
-      const X = (n) => cx + (n.x - 0.5) * W2;
-      const Y = (n) => cy + n.y * H * 0.40;
+      // 排在巨环右侧之外，避免和圆环抢同一片区域
+      const cx = g.cx + g.R * 1.02, cy = g.cy;
+      const W2 = Math.min(W * 0.50, Math.max(240, (W - cx - 18) * 2));
 
-      // 层间连接
+      const cxOf = (li) => cx + (li / (infer.layers.length - 1) - 0.5) * W2;
+      const yOf = (node) => cy + node.y * H * 0.30 * (0.82 + 0.18 * Math.sin(Math.PI * (node.li / 5)));
+
+      /* 层间连接（只画拓扑，不抢视线） */
       for (let li = 0; li < infer.layers.length - 1; li++) {
-        const A = infer.layers[li], B = infer.layers[li + 1];
-        for (let i = 0; i < A.length; i += 1) {
-          for (let j = 0; j < B.length; j += 2) {
+        const A = infer.layers[li];
+        A.forEach((a, ai) => {
+          infer.adj[li][ai].forEach(bi => {
+            const b = infer.layers[li + 1][bi];
             ctx.beginPath();
-            ctx.moveTo(X(A[i]), Y(A[i]));
-            ctx.lineTo(X(B[j]), Y(B[j]));
-            ctx.strokeStyle = rgba(accent, 0.018 * glow);
+            ctx.moveTo(cxOf(li), yOf(a));
+            ctx.lineTo(cxOf(li + 1), yOf(b));
+            ctx.strokeStyle = rgba(accent, 0.085 * glow);
             ctx.lineWidth = 0.6;
+            ctx.stroke();
+          });
+        });
+      }
+
+      /* 每层一条很淡的竖向参考线，让六层结构可辨 */
+      for (let li = 0; li < 6; li++) {
+        const x = cxOf(li);
+        const half = H * 0.155 * (0.82 + 0.18 * Math.sin(Math.PI * (li / 5)));
+        ctx.beginPath();
+        ctx.moveTo(x, cy - half);
+        ctx.lineTo(x, cy + half);
+        ctx.strokeStyle = rgba(accent, 0.035 * glow);
+        ctx.lineWidth = 0.7;
+        ctx.stroke();
+      }
+
+      /* 层标签 */
+      ctx.font = '8.5px ui-monospace, monospace';
+      ctx.textAlign = 'center';
+      for (let li = 0; li < 6; li++) {
+        ctx.fillStyle = 'rgba(150,163,178,.70)';
+        ctx.fillText(INFER_LABELS[li], cxOf(li), cy + H * 0.20);
+      }
+      ctx.textAlign = 'left';
+
+      /* 任务：错峰并行，逐层推进 */
+      const cap = 48;
+      if (infer.tasks.length < cap && Math.random() < 0.55) {
+        const start = (Math.random() * infer.layers[0].length) | 0;
+        infer.tasks.push({ li: 0, idx: start, t: 0, speed: 2.6 + Math.random() * 2.4, ch: (Math.random() * 5) | 0, trail: [] });
+      }
+      if (infer.branch.length < 10 && Math.random() < 0.18) {
+        const start = (Math.random() * infer.layers[0].length) | 0;
+        infer.branch.push({ li: 0, idx: start, t: 0, speed: 2.2, life: 1 });
+      }
+
+      const stepTasks = (arr, isBranch) => {
+        for (let i = arr.length - 1; i >= 0; i--) {
+          const tk = arr[i];
+          tk.t += dt * tk.speed;
+          if (tk.t >= 1) {
+            tk.t -= 1;
+            tk.li++;
+            if (tk.li >= infer.layers.length - 1) {
+              if (!isBranch) NX.emit('arrival', { ch: tk.ch });
+              arr.splice(i, 1);
+              continue;
+            }
+            const opts = infer.adj[tk.li - 1][tk.idx] || [0];
+            tk.idx = opts[(Math.random() * opts.length) | 0];
+          }
+
+          const li = Math.min(tk.li, 4);
+          const a = infer.layers[li][tk.idx];
+          const bIdx = (infer.adj[li][tk.idx] || [0])[0];
+          const b = infer.layers[li + 1][bIdx];
+          const x0 = cxOf(li), x1 = cxOf(li + 1);
+          const y0 = yOf(a), y1 = yOf(b);
+          const x = x0 + (x1 - x0) * tk.t;
+          const y = y0 + (y1 - y0) * tk.t;
+
+          const alpha = isBranch ? 0.22 : 0.85;
+          const col = isBranch ? rgba(accent, alpha) : rgba(accent, alpha * glow);
+          // 亮痕
+          ctx.beginPath();
+          ctx.moveTo(x0, y0);
+          ctx.lineTo(x, y);
+          ctx.strokeStyle = rgba(accent, isBranch ? 0.07 : 0.26 * (1 - tk.t * 0.5));
+          ctx.lineWidth = isBranch ? 0.6 : 1.1;
+          ctx.stroke();
+
+          ctx.beginPath(); ctx.arc(x, y, isBranch ? 1.2 : 1.9, 0, TAU);
+          ctx.fillStyle = col;
+          ctx.fill();
+          ctx.beginPath(); ctx.arc(x, y, isBranch ? 3 : 5.5, 0, TAU);
+          ctx.fillStyle = rgba(accent, isBranch ? 0.03 : 0.10);
+          ctx.fill();
+        }
+      };
+      stepTasks(infer.tasks, false);
+      stepTasks(infer.branch, true);
+
+      /* 节点：只有正在通过的任务才亮 */
+      for (let li = 0; li < infer.layers.length; li++) {
+        for (const n of infer.layers[li]) {
+          const busy = infer.tasks.some(t => t.li === li && t.idx === n.i) ||
+            infer.branch.some(t => t.li === li && t.idx === n.i);
+          const x = cxOf(li), y = yOf(n);
+          ctx.beginPath();
+          ctx.arc(x, y, busy ? 2.9 : 1.8, 0, TAU);
+          ctx.fillStyle = rgba(accent, busy ? 1 : 0.42);
+          ctx.fill();
+          if (busy) {
+            ctx.beginPath(); ctx.arc(x, y, 6, 0, TAU);
+            ctx.strokeStyle = rgba(accent, 0.16);
+            ctx.lineWidth = 0.8;
             ctx.stroke();
           }
         }
       }
 
-      // 任务包：逐层推进
-      if (infer.tasks.length < 60 && Math.random() < 0.35) {
-        const chI = (Math.random() * 5) | 0;
-        infer.tasks.push({ ch: chI, li: 0, t: 0, speed: 1.4 + Math.random() * 1.6, branch: Math.random() < 0.4 });
-      }
-      for (let i = infer.tasks.length - 1; i >= 0; i--) {
-        const tk = infer.tasks[i];
-        tk.t += dt * tk.speed;
-        if (tk.t >= 1) {
-          tk.t -= 1;
-          tk.li++;
-          if (tk.li >= infer.layers.length - 1) {
-            NX.emit('arrival', { ch: tk.ch });
-            infer.tasks.splice(i, 1);
-            continue;
-          }
-        }
-        const A = infer.layers[tk.li], B = infer.layers[tk.li + 1];
-        const a = A[(tk.ch * 3 + tk.li) % A.length];
-        const b = B[(tk.ch * 5 + tk.li * 2) % B.length];
-        const x = X(a) + (X(b) - X(a)) * tk.t;
-        const y = Y(a) + (Y(b) - Y(a)) * tk.t;
-        ctx.beginPath(); ctx.arc(x, y, 1.6, 0, TAU);
-        ctx.fillStyle = rgba(accent, 0.85 * glow);
-        ctx.fill();
-        // 亮痕
-        ctx.beginPath(); ctx.arc(x, y, 4.5, 0, TAU);
-        ctx.fillStyle = rgba(accent, 0.10 * glow);
-        ctx.fill();
-      }
-
-      // 节点
-      for (const n of infer.nodes) {
-        const active = infer.tasks.some(t => t.li === n.li && Math.abs((t.ch * 3 + t.li) % 100) < 30);
-        const r = active ? 2.4 : 1.5;
-        ctx.beginPath(); ctx.arc(X(n), Y(n), r, 0, TAU);
-        ctx.fillStyle = rgba(accent, active ? 0.9 : 0.22);
-        ctx.fill();
-      }
-
-      // 过载：额外缓存格与并行候选
+      /* 过载：缓存格积聚排出 + 三路并行候选 */
       if (NX.S.settings.over) {
         CH.forEach((ch, i) => {
           if (!NX.S.chan[i].over) return;
-          const layer = infer.layers[3 + (i % 2)];
-          infer.cache.push({ x: X(layer[0]) + 26, y: Y(layer[0]) + (i - 2) * 6, t: 0 });
+          if (Math.random() < 0.25) {
+            const li = 2 + (i % 3);
+            const n = infer.layers[li][(Math.random() * infer.layers[li].length) | 0];
+            infer.cache.push({ x: cxOf(li) + 6, y: yOf(n) - 6, t: 0 });
+          }
         });
       }
       for (let i = infer.cache.length - 1; i >= 0; i--) {
         const c = infer.cache[i];
         c.t += dt;
-        if (c.t > 1.4) { infer.cache.splice(i, 1); continue; }
-        const s = 3 + Math.sin(c.t * 10) * 1.2;
-        ctx.strokeStyle = 'rgba(232,168,112,.5)';
+        if (c.t > 1.2) { infer.cache.splice(i, 1); continue; }
+        const s = 3 + Math.sin(c.t * 12) * 1.4;
+        ctx.strokeStyle = `rgba(240,178,120,${0.55 * (1 - c.t / 1.2)})`;
+        ctx.lineWidth = 0.9;
         ctx.strokeRect(c.x, c.y, s, s);
       }
-      if (infer.cache.length > 60) infer.cache.splice(0, infer.cache.length - 60);
+      if (infer.cache.length > 70) infer.cache.splice(0, infer.cache.length - 70);
 
-      // 左右通道仍向五个接收端输出
       drawStreams(dt, now, accent, 'line');
     }
   };
