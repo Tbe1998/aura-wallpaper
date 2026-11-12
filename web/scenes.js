@@ -84,7 +84,8 @@ void main(){
   float n1 = norm(fbm3(vec3(q * 2.10, t * 0.55)));
   float n2 = norm(fbm3(vec3(q * 6.80, t * 0.95)));
   float n3 = norm(fbm3(vec3(q * 15.0, t * 1.30)));
-  float gas = band * (0.38 + 0.95 * n1) * (0.70 + 0.55 * n2) * (0.85 + 0.30 * n3);
+  float n4 = norm(fbm3(vec3(q * 31.0, t * 1.8)));
+  float gas = band * (0.38 + 0.95 * n1) * (0.70 + 0.55 * n2) * (0.85 + 0.30 * n3) * (0.90 + 0.18 * n4);
 
   // 银心：偏左的暖色亮核
   float corePos = exp(-pow((q.x + 0.52) / 0.62, 2.0));
@@ -92,8 +93,8 @@ void main(){
 
   vec3 col = vec3(0.0022, 0.0032, 0.0068);
   col += vec3(0.045, 0.095, 0.185) * gas * 0.85;                   // 冷蓝气体
-  col += uAccent * pow(gas, 1.45) * 0.42;                          // 主题色
-  col += vec3(0.55, 0.33, 0.17) * pow(gas * corePos, 1.9) * 0.85;  // 银心暖光
+  col += uAccent * pow(gas, 1.45) * 0.50;                          // 主题色
+  col += vec3(0.46, 0.28, 0.16) * pow(gas * corePos, 1.9) * 0.70;  // 银心暖光
   col += vec3(0.30, 0.20, 0.13) * bandW * corePos * coreAmp * 0.35;
   col += uAccent * pow(bandW, 2.8) * 0.05;                         // 外晕
 
@@ -115,7 +116,7 @@ void main(){
     float d = length(f);
     float sp = smoothstep(0.24, 0.0, d) * tw;
     vec3 tint = mix(vec3(0.78, 0.87, 1.0), vec3(1.0, 0.92, 0.82), fract(h * 7.0));
-    stars += present * sp * (0.30 - 0.05 * float(i)) * tint;
+    stars += present * sp * (0.42 - 0.06 * float(i)) * tint;
   }
   // 少量亮星
   for (int i = 0; i < 2; i++){
@@ -211,14 +212,14 @@ void main(){
   vec2 gw = max(fwidth(gv), vec2(1e-6));
   vec2 gl = abs(fract(gv - 0.5) - 0.5) / gw;
   float line = 1.0 - min(min(gl.x, gl.y), 1.0);
-  col += uAccent * line * 0.045;
+  col += uAccent * line * 0.062;
 
   // 主网格（每 5 格）
   vec2 gv2 = uv / (cell * 5.0);
   vec2 gw2 = max(fwidth(gv2), vec2(1e-6));
   vec2 gl2 = abs(fract(gv2 - 0.5) - 0.5) / gw2;
   float line2 = 1.0 - min(min(gl2.x, gl2.y), 1.0);
-  col += uAccent * line2 * 0.095;
+  col += uAccent * line2 * 0.125;
 
   // 八路细脉冲环：细、淡、错峰
   for (int i = 0; i < 8; i++){
@@ -229,7 +230,7 @@ void main(){
     float r  = 0.04 + ph * 0.92;
     float wdt = 0.0022 + 0.0014 * (1.0 - ph);
     float ring = smoothstep(wdt, 0.0004, abs(d - r)) * (1.0 - ph) * (1.0 - ph);
-    col += uAccent * ring * 0.30 * (0.7 + 0.5 * uLoad);
+    col += uAccent * ring * 0.40 * (0.7 + 0.5 * uLoad);
     col += uAccent * ring * line2 * 2.2;   // 与主网格交点处更亮，像真实脉冲
     // 环内余晖
     float trail = smoothstep(0.16, 0.0, abs(d - r) / (1.0 + 4.0 * ph)) * (1.0 - ph) * 0.05;
@@ -241,7 +242,7 @@ void main(){
   vec2 iv = abs(fract(uv / (cell * 5.0) + 0.5) - 0.5) * (cell * 5.0);
   float cross = (smoothstep(0.007, 0.0, iv.x) * smoothstep(0.0011, 0.0, iv.y) +
                  smoothstep(0.007, 0.0, iv.y) * smoothstep(0.0011, 0.0, iv.x));
-  col += uAccent * cross * 0.13;
+  col += uAccent * cross * 0.16;
 
   // 扫描线
   float sy = fract(t * 0.020) * 1.7 - 0.85;
