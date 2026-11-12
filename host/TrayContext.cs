@@ -2,6 +2,7 @@ using System;
 using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -143,28 +144,54 @@ namespace AuraWall
         [DllImport("user32.dll")] private static extern bool GetWindowRect(IntPtr h, out RECT r);
         [DllImport("user32.dll")] private static extern IntPtr GetShellWindow();
 
-        /// <summary>前台是否是一个全屏窗口（玩游戏/看视频时暂停动效省电）。</summary>
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassName(IntPtr hWnd, StringBuilder sb, int max);
+
+        [DllImport("user32.dll")]
+        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+
+        private int _fullTicks;
+
+        /// <summary>
+        /// 前台是否真的是一个全屏应用。桌面本身（Progman/WorkerW）、任务栏、
+        /// 本程序自己的窗口都不算；还要连续两秒都成立才算，避免误判把动效卡住。
+        /// </summary>
         private bool FullscreenActive()
         {
             try
             {
                 IntPtr fg = GetForegroundWindow();
-                if (fg == IntPtr.Zero || fg == GetShellWindow()) return false;
-                if (_win != null && _win.IsHandleCreated && fg == _win.Handle) return false;
+                if (fg == IntPtr.Zero) { _fullTicks = 0; return false; }
+
+                var sb = new StringBuilder(256);
+                GetClassName(fg, sb, sb.Capacity);
+                string cls = sb.ToString();
+                if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" ||
+                    cls == "NotifyIconOverflowWindow" || cls == "SysListView32")
+                {
+                    _fullTicks = 0;
+                    return false;
+                }
+
+                uint pid;
+                GetWindowThreadProcessId(fg, out pid);
+                if (pid == (uint)System.Diagnostics.Process.GetCurrentProcess().Id)
+                {
+                    _fullTicks = 0;
+                    return false;
+                }
+
                 RECT r;
-                if (!GetWindowRect(fg, out r)) return false;
+                if (!GetWindowRect(fg, out r)) { _fullTicks = 0; return false; }
+
                 var scr = Screen.PrimaryScreen.Bounds;
                 bool covers = r.Left <= scr.Left + 2 && r.Top <= scr.Top + 2 &&
                               r.Right >= scr.Right - 2 && r.Bottom >= scr.Bottom - 2;
-                string title = fg.ToString();
-                if (covers && title != _lastForeground)
-                {
-                    _lastForeground = title;
-                    Log.Write("检测到全屏窗口，暂停动效。");
-                }
-                return covers;
+
+                _fullTicks = covers ? _fullTicks + 1 : 0;
+                return _fullTicks >= 2;
             }
-            catch { return false; }
+            catch { _fullTicks = 0; return false; }
         }
 
         /* ------------------------------------------------------------ 托盘菜单 */
@@ -315,16 +342,29 @@ namespace AuraWall
 
         private void RefreshChecks(ContextMenuStrip menu)
         {
-            foreach (ToolStripMenuItem top in menu.Items)
+            foreach (ToolStripItem item in menu.Items)
             {
+                // 分隔符等不是 ToolStripMenuItem，必须跳过，否则托盘菜单一打开就抛异常
+                if (!(item is ToolStripMenuItem top)) continue;
                 if (top.DropDownItems.Count == 0) continue;
-                foreach (ToolStripMenuItem it in top.DropDownItems)
+
+                foreach (ToolStripItem sub in top.DropDownItems)
                 {
-                    if (top.Text == "场景") it.Checked = (string)it.Tag == _st.Scene;
-                    else if (top.Text == "配色") it.Checked = (string)it.Tag == _st.Accent;
-                    else if (top.Text == "动效强度") it.Checked = (string)it.Tag == _st.Intensity.ToString("0.##");
-                    else if (top.Text == "帧率上限") it.Checked = (string)it.Tag == _st.Fps.ToString();
+                    if (!(sub is ToolStripMenuItem it) || it.Tag == null) continue;
+                    string tag = it.Tag as string;
+                    if (tag == null) continue;
+
+                    if (top.Text == "场景") it.Checked = tag == _st.Scene;
+                    else if (top.Text == "配色") it.Checked = tag == _st.Accent;
+                    else if (top.Text == "动效强度") it.Checked = tag == _st.Intensity.ToString("0.##");
+                    else if (top.Text == "帧率上限") it.Checked = tag == _st.Fps.ToString();
                 }
+            }
+
+            foreach (ToolStripItem item in menu.Items)
+            {
+                if (item is ToolStripMenuItem m && m.Text == "暂停动效") m.Text = "继续动效";
+                else if (item is ToolStripMenuItem m2 && m2.Text == "继续动效" && _st.Paused) m2.Text = "继续动效";
             }
         }
 
