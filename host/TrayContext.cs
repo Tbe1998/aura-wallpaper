@@ -340,24 +340,30 @@ namespace AuraWall
             return menu;
         }
 
-        private void RefreshChecks(ContextMenuStrip menu)
+        private void RefreshChecks(ContextMenuStrip menu) => ApplyChecks(menu, _st);
+
+        /// <summary>
+        /// 按当前设置勾选菜单项。菜单里混有分隔符与普通项，必须用类型判断跳过，
+        /// 不能假设 Items 全是 ToolStripMenuItem（早先的崩溃点）。
+        /// </summary>
+        internal static void ApplyChecks(ContextMenuStrip menu, Settings st)
         {
             foreach (ToolStripItem item in menu.Items)
             {
-                // 分隔符等不是 ToolStripMenuItem，必须跳过，否则托盘菜单一打开就抛异常
-                if (!(item is ToolStripMenuItem top)) continue;
-                if (top.DropDownItems.Count == 0) continue;
+                var top = item as ToolStripMenuItem;
+                if (top == null || top.DropDownItems.Count == 0) continue;
 
                 foreach (ToolStripItem sub in top.DropDownItems)
                 {
-                    if (!(sub is ToolStripMenuItem it) || it.Tag == null) continue;
+                    var it = sub as ToolStripMenuItem;
+                    if (it == null) continue;
                     string tag = it.Tag as string;
                     if (tag == null) continue;
 
-                    if (top.Text == "场景") it.Checked = tag == _st.Scene;
-                    else if (top.Text == "配色") it.Checked = tag == _st.Accent;
-                    else if (top.Text == "动效强度") it.Checked = tag == _st.Intensity.ToString("0.##");
-                    else if (top.Text == "帧率上限") it.Checked = tag == _st.Fps.ToString();
+                    if (top.Text == "场景") it.Checked = tag == st.Scene;
+                    else if (top.Text == "配色") it.Checked = tag == st.Accent;
+                    else if (top.Text == "动效强度") it.Checked = tag == st.Intensity.ToString("0.##");
+                    else if (top.Text == "帧率上限") it.Checked = tag == st.Fps.ToString();
                 }
             }
 
@@ -365,7 +371,7 @@ namespace AuraWall
             {
                 var m = item as ToolStripMenuItem;
                 if (m != null && (m.Text == "暂停动效" || m.Text == "继续动效"))
-                    m.Text = _st.Paused ? "继续动效" : "暂停动效";
+                    m.Text = st.Paused ? "继续动效" : "暂停动效";
             }
         }
 

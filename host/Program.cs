@@ -14,6 +14,11 @@ namespace AuraWall
                 return SelfTest.Run(args.Length > 1 ? args[1] : null);
             }
 
+            if (args.Length > 0 && args[0] == "--traytest")
+            {
+                return TrayMenuCheck.Run(args.Length > 1 ? args[1] : null);
+            }
+
             bool windowed = Array.IndexOf(args, "--windowed") >= 0;
 
             using (var mutex = new Mutex(true, @"Local\AURA_Wallpaper_Single", out bool created))

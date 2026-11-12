@@ -50,6 +50,16 @@ jobs:
           }
           if ($code -ne 0) { throw "自检未通过（$code）" }
 
+      - name: 托盘菜单自检（分隔符 + 勾选状态）
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist\AURA-v1.0.1-win64\AURA.exe"
+          $log = Join-Path $PWD "traytest.txt"
+          $p = Start-Process -FilePath $exe -ArgumentList @("--traytest", $log) -PassThru -Wait
+          Write-Output "退出码: $($p.ExitCode)"
+          if (Test-Path $log) { Get-Content $log }
+          if ($p.ExitCode -ne 0) { throw "托盘菜单自检未通过" }
+
       - name: 压缩发布包
         shell: pwsh
         run: |
