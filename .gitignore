@@ -1,0 +1,9 @@
+bin/
+obj/
+dist/
+*.log
+*.user
+selftest.txt
+.vs/
+docs/shots/*_v*.png
+web/dbg.html

@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AURA · 桌面动态背景</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden;cursor:default}
+  #c{position:fixed;inset:0;width:100%;height:100%;display:block}
+  #fade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;
+        transition:opacity .42s ease}
+  #fade.on{opacity:1}
+  #err{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);color:#8a94a2;
+       font:12px/1.7 "Segoe UI","Microsoft YaHei",sans-serif;text-align:center;display:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="fade"></div>
+<div id="err">当前环境不支持 WebGL2，无法显示动态背景。</div>
+<script src="scenes.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

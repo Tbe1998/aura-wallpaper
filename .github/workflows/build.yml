@@ -1,0 +1,71 @@
+name: build-windows
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 还原并构建
+        run: dotnet build host/AURA.csproj -c Release -o dist/AURA
+
+      - name: 组装发布目录
+        shell: pwsh
+        run: |
+          $dst = "dist\AURA-v1.0.0-win64"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          Copy-Item "dist\AURA\*" $dst -Recurse -Force
+          Copy-Item "使用说明.txt" $dst -Force
+          if (Test-Path "docs") { Copy-Item "docs" $dst -Recurse -Force }
+          Write-Output "--- 发布目录 ---"
+          Get-ChildItem $dst | Select-Object Name, Length
+          Write-Output "--- web ---"
+          Get-ChildItem "$dst\web" | Select-Object Name, Length
+
+      - name: 启动自检（WebView2 + 三个场景着色器）
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist\AURA-v1.0.0-win64\AURA.exe"
+          $log = Join-Path $PWD "selftest.txt"
+          & $exe --selftest $log
+          $code = $LASTEXITCODE
+          Write-Output "退出码: $code"
+          if (Test-Path $log) { Get-Content $log }
+          if (Test-Path "dist\AURA-v1.0.0-win64\aura.log") {
+            Write-Output "--- aura.log ---"; Get-Content "dist\AURA-v1.0.0-win64\aura.log"
+          }
+          if ($code -ne 0) { throw "自检未通过（$code）" }
+
+      - name: 压缩发布包
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "dist\AURA-v1.0.0-win64" -DestinationPath "dist\AURA-v1.0.0-win64.zip" -CompressionLevel Optimal
+          Get-Item "dist\AURA-v1.0.0-win64.zip" | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AURA-win64
+          path: dist/AURA-v1.0.0-win64.zip
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: 打标签时发布 Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" "dist\AURA-v1.0.0-win64.zip" --title "AURA ${{ github.ref_name }}" --notes "Windows 免安装版：解压后双击 AURA.exe"
