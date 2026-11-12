@@ -63,8 +63,6 @@ namespace AuraWall
                 DefaultBackgroundColor = Color.Black
             };
             Controls.Add(_web);
-
-            if (windowed && false) { }
         }
 
         protected override bool ShowWithoutActivation => true;

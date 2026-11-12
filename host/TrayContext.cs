@@ -71,6 +71,7 @@ namespace AuraWall
 
         private void OnWatchdog(object sender, EventArgs e)
         {
+            if (_windowed) return;   // 预览窗口模式不挂桌面层，无需守护
             try
             {
                 if (_win == null || !_win.IsHandleCreated || !_win.HostAlive)
