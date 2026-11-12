@@ -363,8 +363,9 @@ namespace AuraWall
 
             foreach (ToolStripItem item in menu.Items)
             {
-                if (item is ToolStripMenuItem m && m.Text == "暂停动效") m.Text = "继续动效";
-                else if (item is ToolStripMenuItem m2 && m2.Text == "继续动效" && _st.Paused) m2.Text = "继续动效";
+                var m = item as ToolStripMenuItem;
+                if (m != null && (m.Text == "暂停动效" || m.Text == "继续动效"))
+                    m.Text = _st.Paused ? "继续动效" : "暂停动效";
             }
         }
 
