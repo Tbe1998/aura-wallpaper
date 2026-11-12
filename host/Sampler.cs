@@ -83,23 +83,25 @@ namespace AuraWall
 
         /* ---------------------------------------------------------------- 网络 */
 
-        private static IEnumerable<NetworkInterface> ActiveIfaces()
+        private static List<NetworkInterface> ActiveIfaces()
         {
-            NetworkInterface[] all;
-            try { all = NetworkInterface.GetAllNetworkInterfaces(); }
-            catch { yield break; }
-
-            foreach (var ni in all)
+            var list = new List<NetworkInterface>();
+            try
             {
-                try
+                foreach (var ni in NetworkInterface.GetAllNetworkInterfaces())
                 {
-                    if (ni.OperationalStatus != OperationalStatus.Up) continue;
-                    if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
-                    if (ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel) continue;
-                    yield return ni;
+                    try
+                    {
+                        if (ni.OperationalStatus != OperationalStatus.Up) continue;
+                        if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+                        if (ni.NetworkInterfaceType == NetworkInterfaceType.Tunnel) continue;
+                        list.Add(ni);
+                    }
+                    catch { }
                 }
-                catch { }
             }
+            catch { }
+            return list;
         }
 
         private static long TotalBytes(bool sent)
