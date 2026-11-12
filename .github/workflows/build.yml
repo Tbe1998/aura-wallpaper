@@ -67,7 +67,7 @@ jobs:
           $dir = Join-Path $PWD "updtest"
           New-Item -ItemType Directory -Force $dir | Out-Null
           $zipName = "AURA-v9.9.9-win64.zip"
-          Copy-Item "dist\AURA-v1.1.0-win64.zip" (Join-Path $dir $zipName)
+          Set-Content -Path (Join-Path $dir $zipName) -Value "dummy-package-for-manifest-test" -Encoding UTF8
           $json = @{ version = "9.9.9"; url = $zipName; sha256 = "test"; size = 1; notes = "CI 测试清单" } | ConvertTo-Json
           Set-Content -Path (Join-Path $dir "update.json") -Value $json -Encoding UTF8
           $manifest = "file:///" + ((Join-Path $dir "update.json") -replace '\\','/')
