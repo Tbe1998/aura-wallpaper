@@ -9,14 +9,17 @@ namespace AuraWall
     {
         public static int Run(string outPath, string urlOverride)
         {
-            string manifest = string.IsNullOrWhiteSpace(urlOverride) ? Updater.DefaultManifestUrl : urlOverride;
+            var urls = string.IsNullOrWhiteSpace(urlOverride)
+                ? new[] { Updater.DefaultManifestUrl, Updater.LanManifestUrl }
+                : new[] { urlOverride };
             var sb = new StringBuilder();
             int code = 1;
             try
             {
-                string err;
-                var info = Updater.Check(manifest, out err);
-                sb.AppendLine("更新源: " + manifest);
+                string err, used;
+                var info = Updater.CheckAny(urls, out err, out used);
+                sb.AppendLine("候选源: " + string.Join(" , ", urls));
+                sb.AppendLine("实际使用: " + (used ?? "(全部失败)"));
                 sb.AppendLine("本机版本: " + Updater.LocalVersion);
                 if (info == null)
                 {

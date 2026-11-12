@@ -30,8 +30,11 @@ namespace AuraWall
     /// </summary>
     public static class Updater
     {
-        /// <summary>默认更新源（群晖 Web Station 静态目录 /web/aura）。</summary>
-        public const string DefaultManifestUrl = "http://192.168.1.6/aura/update.json";
+        /// <summary>默认更新源：NAS 的外网地址（反代到 /volume1/web/aura）。</summary>
+        public const string DefaultManifestUrl = "https://www.topbei.cn/aura/update.json";
+
+        /// <summary>局域网兜底地址：外网不通时尝试它。</summary>
+        public const string LanManifestUrl = "http://192.168.1.6/aura/update.json";
 
         public static string LocalVersion =>
             Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
@@ -39,6 +42,32 @@ namespace AuraWall
         public static string ResolveManifestUrl(Settings st)
         {
             return string.IsNullOrWhiteSpace(st.UpdateUrl) ? DefaultManifestUrl : st.UpdateUrl.Trim();
+        }
+
+        /// <summary>候选清单地址：用户自填优先，否则外网 + 局域网依次尝试。</summary>
+        public static string[] ResolveManifestUrls(Settings st)
+        {
+            if (!string.IsNullOrWhiteSpace(st.UpdateUrl)) return new[] { st.UpdateUrl.Trim() };
+            return new[] { DefaultManifestUrl, LanManifestUrl };
+        }
+
+        /// <summary>依次尝试候选地址，返回第一个可用的清单。</summary>
+        public static UpdateInfo CheckAny(string[] urls, out string error, out string usedUrl)
+        {
+            error = null;
+            usedUrl = null;
+            foreach (var u in urls)
+            {
+                string err;
+                var info = Check(u, out err);
+                if (info != null)
+                {
+                    usedUrl = u;
+                    return info;
+                }
+                error = (error == null ? "" : error + "；") + u + " → " + err;
+            }
+            return null;
         }
 
         public static UpdateInfo Check(string manifestUrl, out string error)

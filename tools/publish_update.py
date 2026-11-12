@@ -25,7 +25,7 @@ NAS = os.environ.get("NAS_HOST", "192.168.1.6")
 NAS_USER = os.environ.get("NAS_USER", "bei")
 NAS_PASS = os.environ.get("NAS_PASS", "Hzy1998.")
 REMOTE_DIR = os.environ.get("NAS_DIR", "/volume1/web/aura")
-PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "http://192.168.1.6/aura")
+PUBLIC_BASE = os.environ.get("PUBLIC_BASE", "https://www.topbei.cn/aura")
 SSHPASS = os.environ.get("SSHPASS_BIN", "/opt/data/.local/bin/sshpass")
 
 

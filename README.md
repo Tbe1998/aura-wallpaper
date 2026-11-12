@@ -19,7 +19,7 @@
 
 ## 自动更新
 
-托盘右键 →「检查更新」，从 NAS 的 `http://192.168.1.6/aura/update.json` 读取新版本，
+托盘右键 →「检查更新」，从 NAS 的 `https://www.topbei.cn/aura/update.json` 读取新版本（外网不通时自动改试局域网 `http://192.168.1.6/aura/update.json`），
 下载后校验 SHA-256，替换文件并自动重启。默认启动 12 秒后静默检查一次。
 
 - 更新源可在 `%APPDATA%\AURA\settings.json` 的 `UpdateUrl` 改成别的地址。

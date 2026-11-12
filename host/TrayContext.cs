@@ -451,7 +451,7 @@ namespace AuraWall
         {
             if (_checkingUpdate) return;
             _checkingUpdate = true;
-            string manifest = Updater.ResolveManifestUrl(_st);
+            var manifests = Updater.ResolveManifestUrls(_st);
 
             Task.Run(() =>
             {
@@ -459,11 +459,11 @@ namespace AuraWall
                 {
                     Post(() => { if (!silent) ShowBalloon("正在检查更新…"); });
 
-                    string err;
-                    var info = Updater.Check(manifest, out err);
+                    string err, used;
+                    var info = Updater.CheckAny(manifests, out err, out used);
                     if (info == null)
                     {
-                        Log.Write("检查更新失败：" + err + "（源 " + manifest + "）");
+                        Log.Write("检查更新失败：" + err);
                         Post(() => { if (!silent) ShowBalloon("检查更新失败：" + err); });
                         return;
                     }
@@ -475,7 +475,7 @@ namespace AuraWall
                         return;
                     }
 
-                    Log.Write("发现新版本 " + info.version + "（当前 " + Updater.LocalVersion + "）");
+                    Log.Write("发现新版本 " + info.version + "（当前 " + Updater.LocalVersion + "），源 " + used);
                     Post(() =>
                     {
                         var msg = "发现新版本 " + info.version + "（当前 " + Updater.LocalVersion + "）"
@@ -489,7 +489,7 @@ namespace AuraWall
                             try
                             {
                                 Post(() => ShowBalloon("正在下载 " + info.version + "…"));
-                                string zip = Updater.Download(info, manifest, null);
+                                string zip = Updater.Download(info, used, null);
                                 Log.Write("更新包已下载并校验：" + zip);
                                 Post(() =>
                                 {
