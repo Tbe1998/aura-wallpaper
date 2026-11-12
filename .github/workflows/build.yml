@@ -40,8 +40,8 @@ jobs:
         run: |
           $exe = Resolve-Path "dist\AURA-v1.0.0-win64\AURA.exe"
           $log = Join-Path $PWD "selftest.txt"
-          & $exe --selftest $log
-          $code = $LASTEXITCODE
+          $p = Start-Process -FilePath $exe -ArgumentList @("--selftest", $log) -PassThru -Wait
+          $code = $p.ExitCode
           Write-Output "退出码: $code"
           if (Test-Path $log) { Get-Content $log }
           if (Test-Path "dist\AURA-v1.0.0-win64\aura.log") {
