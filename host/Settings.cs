@@ -16,6 +16,11 @@ namespace AuraWall
         public bool Paused { get; set; } = false;
         public bool PausedWhenFullscreen { get; set; } = true;
 
+        /// <summary>更新源（update.json 地址）；留空则用内置 NAS 地址。</summary>
+        public string UpdateUrl { get; set; } = "";
+
+        public bool AutoCheckUpdate { get; set; } = true;
+
         private static string Dir =>
             Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "AURA");
 

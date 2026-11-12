@@ -25,7 +25,7 @@ jobs:
       - name: 组装发布目录
         shell: pwsh
         run: |
-          $dst = "dist\AURA-v1.0.1-win64"
+          $dst = "dist\AURA-v1.1.0-win64"
           New-Item -ItemType Directory -Force $dst | Out-Null
           Copy-Item "dist\AURA\*" $dst -Recurse -Force
           Copy-Item "使用说明.txt" $dst -Force
@@ -39,39 +39,57 @@ jobs:
       - name: 启动自检（WebView2 + 三个场景着色器）
         shell: pwsh
         run: |
-          $exe = Resolve-Path "dist\AURA-v1.0.1-win64\AURA.exe"
+          $exe = Resolve-Path "dist\AURA-v1.1.0-win64\AURA.exe"
           $log = Join-Path $PWD "selftest.txt"
           $p = Start-Process -FilePath $exe -ArgumentList @("--selftest", $log) -PassThru -Wait
           $code = $p.ExitCode
           Write-Output "退出码: $code"
           if (Test-Path $log) { Get-Content $log }
-          if (Test-Path "dist\AURA-v1.0.1-win64\aura.log") {
-            Write-Output "--- aura.log ---"; Get-Content "dist\AURA-v1.0.1-win64\aura.log"
+          if (Test-Path "dist\AURA-v1.1.0-win64\aura.log") {
+            Write-Output "--- aura.log ---"; Get-Content "dist\AURA-v1.1.0-win64\aura.log"
           }
           if ($code -ne 0) { throw "自检未通过（$code）" }
 
       - name: 托盘菜单自检（分隔符 + 勾选状态）
         shell: pwsh
         run: |
-          $exe = Resolve-Path "dist\AURA-v1.0.1-win64\AURA.exe"
+          $exe = Resolve-Path "dist\AURA-v1.1.0-win64\AURA.exe"
           $log = Join-Path $PWD "traytest.txt"
           $p = Start-Process -FilePath $exe -ArgumentList @("--traytest", $log) -PassThru -Wait
           Write-Output "退出码: $($p.ExitCode)"
           if (Test-Path $log) { Get-Content $log }
           if ($p.ExitCode -ne 0) { throw "托盘菜单自检未通过" }
 
+      - name: 更新通道自检（读取 update.json + 版本比较）
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path "dist\AURA-v1.1.0-win64\AURA.exe"
+          $dir = Join-Path $PWD "updtest"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          $zipName = "AURA-v9.9.9-win64.zip"
+          Copy-Item "dist\AURA-v1.1.0-win64.zip" (Join-Path $dir $zipName)
+          $json = @{ version = "9.9.9"; url = $zipName; sha256 = "test"; size = 1; notes = "CI 测试清单" } | ConvertTo-Json
+          Set-Content -Path (Join-Path $dir "update.json") -Value $json -Encoding UTF8
+          $manifest = "file:///" + ((Join-Path $dir "update.json") -replace '\\','/')
+          $out = Join-Path $PWD "updatecheck.txt"
+          $p = Start-Process -FilePath $exe -ArgumentList @("--updatecheck", $out, $manifest) -PassThru -Wait
+          Write-Output "退出码: $($p.ExitCode)"
+          Get-Content $out
+          if ($p.ExitCode -ne 0) { throw "更新清单读取失败" }
+          if (-not (Select-String -Path $out -Pattern "是否有更新: 是" -Quiet)) { throw "版本比较未生效" }
+
       - name: 压缩发布包
         shell: pwsh
         run: |
-          Remove-Item "dist\AURA-v1.0.1-win64\aura.log" -ErrorAction SilentlyContinue
-          Get-ChildItem "dist\AURA-v1.0.1-win64" -Filter *.pdb | Remove-Item -Force -ErrorAction SilentlyContinue
-          Compress-Archive -Path "dist\AURA-v1.0.1-win64" -DestinationPath "dist\AURA-v1.0.1-win64.zip" -CompressionLevel Optimal
-          Get-Item "dist\AURA-v1.0.1-win64.zip" | Select-Object Name, Length
+          Remove-Item "dist\AURA-v1.1.0-win64\aura.log" -ErrorAction SilentlyContinue
+          Get-ChildItem "dist\AURA-v1.1.0-win64" -Filter *.pdb | Remove-Item -Force -ErrorAction SilentlyContinue
+          Compress-Archive -Path "dist\AURA-v1.1.0-win64" -DestinationPath "dist\AURA-v1.1.0-win64.zip" -CompressionLevel Optimal
+          Get-Item "dist\AURA-v1.1.0-win64.zip" | Select-Object Name, Length
 
       - uses: actions/upload-artifact@v4
         with:
           name: AURA-win64
-          path: dist/AURA-v1.0.1-win64.zip
+          path: dist/AURA-v1.1.0-win64.zip
           if-no-files-found: error
           retention-days: 90
 
@@ -81,4 +99,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ github.ref_name }}" "dist\AURA-v1.0.1-win64.zip" --title "AURA ${{ github.ref_name }}" --notes "Windows 免安装版：解压后双击 AURA.exe"
+          gh release create "${{ github.ref_name }}" "dist\AURA-v1.1.0-win64.zip" --title "AURA ${{ github.ref_name }}" --notes "Windows 免安装版：解压后双击 AURA.exe"

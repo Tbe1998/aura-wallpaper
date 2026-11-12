@@ -3,6 +3,8 @@ using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Threading.Tasks;
+using SyncContext = System.Threading.SynchronizationContext;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
@@ -19,15 +21,23 @@ namespace AuraWall
         private Timer _tick;        // 1s：负载采样 + 推送
         private Timer _watchdog;    // 4s：桌面层守护
         private SystemLoad _load;
+        private Sampler _sampler;
+        private LocalServer _server;
+        private ConsoleWindow _console;
+        private string _consoleUrl;
 
         private string _lastForeground = "";
+        private SyncContext _sync;
+        private bool _checkingUpdate;
 
         public TrayContext(bool windowed)
         {
             _windowed = windowed;
             _st = Settings.Load();
+            _sync = SyncContext.Current;
 
             _load = new SystemLoad();
+            StartConsoleService();
             CreateWindow();
 
             _tray = new NotifyIcon
@@ -48,7 +58,58 @@ namespace AuraWall
             _watchdog.Start();
 
             SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
+
+            if (_st.AutoCheckUpdate)
+            {
+                var auto = new Timer { Interval = 12000 };
+                auto.Tick += (s2, e2) => { auto.Stop(); auto.Dispose(); CheckUpdate(true); };
+                auto.Start();
+            }
             Log.Write("AURA 启动。场景=" + _st.Scene + " 配色=" + _st.Accent);
+        }
+
+        /* ------------------------------------------------------------ 监控台服务 */
+
+        private void StartConsoleService()
+        {
+            try
+            {
+                _sampler = new Sampler();
+                for (int port = 8791; port <= 8796; port++)
+                {
+                    var srv = new LocalServer(_sampler, port);
+                    if (srv.Start())
+                    {
+                        _server = srv;
+                        _consoleUrl = srv.Url;
+                        break;
+                    }
+                    srv.Dispose();
+                }
+                if (_server == null) Log.Write("监控台本地服务未能启动（端口被占用？）。");
+            }
+            catch (Exception ex) { Log.Write("监控台服务异常：" + ex.Message); }
+        }
+
+        private void OpenConsole()
+        {
+            try
+            {
+                if (_console != null && !_console.IsDisposed)
+                {
+                    _console.Activate();
+                    return;
+                }
+                if (_server == null)
+                {
+                    ShowBalloon("监控台服务未启动，详情见 aura.log。");
+                    return;
+                }
+                _console = new ConsoleWindow(_consoleUrl);
+                _console.FormClosed += (s, e) => _console = null;
+                _console.Show();
+            }
+            catch (Exception ex) { Log.Write("打开监控台失败：" + ex.Message); }
         }
 
         /* ------------------------------------------------------------ 窗口生命周期 */
@@ -200,6 +261,11 @@ namespace AuraWall
         {
             var menu = new ContextMenuStrip { ShowImageMargin = false };
 
+            var mConsole = new ToolStripMenuItem("打开监控台") { Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold) };
+            mConsole.Click += (o, e) => OpenConsole();
+            menu.Items.Add(mConsole);
+            menu.Items.Add(new ToolStripSeparator());
+
             var scenes = new[] {
                 new { id = "nebula", name = "深空星云" },
                 new { id = "fluid",  name = "抽象流体" },
@@ -323,6 +389,10 @@ namespace AuraWall
             mReload.Click += (o, e) => _win?.Reload();
             menu.Items.Add(mReload);
 
+            var mUpdate = new ToolStripMenuItem("检查更新");
+            mUpdate.Click += (o, e) => CheckUpdate(false);
+            menu.Items.Add(mUpdate);
+
             var mLog = new ToolStripMenuItem("打开日志");
             mLog.Click += (o, e) =>
             {
@@ -373,6 +443,97 @@ namespace AuraWall
                 if (m != null && (m.Text == "暂停动效" || m.Text == "继续动效"))
                     m.Text = st.Paused ? "继续动效" : "暂停动效";
             }
+        }
+
+        /* ------------------------------------------------------------ 自更新 */
+
+        private void CheckUpdate(bool silent)
+        {
+            if (_checkingUpdate) return;
+            _checkingUpdate = true;
+            string manifest = Updater.ResolveManifestUrl(_st);
+
+            Task.Run(() =>
+            {
+                try
+                {
+                    Post(() => { if (!silent) ShowBalloon("正在检查更新…"); });
+
+                    string err;
+                    var info = Updater.Check(manifest, out err);
+                    if (info == null)
+                    {
+                        Log.Write("检查更新失败：" + err + "（源 " + manifest + "）");
+                        Post(() => { if (!silent) ShowBalloon("检查更新失败：" + err); });
+                        return;
+                    }
+
+                    if (!Updater.IsNewer(info.version, Updater.LocalVersion))
+                    {
+                        Log.Write("已是最新版本 " + Updater.LocalVersion);
+                        Post(() => { if (!silent) ShowBalloon("已是最新版本 " + Updater.LocalVersion); });
+                        return;
+                    }
+
+                    Log.Write("发现新版本 " + info.version + "（当前 " + Updater.LocalVersion + "）");
+                    Post(() =>
+                    {
+                        var msg = "发现新版本 " + info.version + "（当前 " + Updater.LocalVersion + "）"
+                                  + (string.IsNullOrEmpty(info.notes) ? "" : "\n\n" + info.notes)
+                                  + "\n\n现在下载并更新吗？更新完成后会自动重启 AURA。";
+                        var r = MessageBox.Show(msg, "AURA 更新", MessageBoxButtons.YesNo, MessageBoxIcon.Information);
+                        if (r != DialogResult.Yes) return;
+
+                        Task.Run(() =>
+                        {
+                            try
+                            {
+                                Post(() => ShowBalloon("正在下载 " + info.version + "…"));
+                                string zip = Updater.Download(info, manifest, null);
+                                Log.Write("更新包已下载并校验：" + zip);
+                                Post(() =>
+                                {
+                                    ShowBalloon("下载完成，正在替换并重启…");
+                                    Updater.ApplyAndExit(zip);
+                                    ShutdownForUpdate();
+                                });
+                            }
+                            catch (Exception ex)
+                            {
+                                Log.Write("更新下载失败：" + ex.Message);
+                                Post(() => ShowBalloon("更新失败：" + ex.Message));
+                            }
+                            finally { _checkingUpdate = false; }
+                        });
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("检查更新异常：" + ex.Message);
+                    Post(() => { if (!silent) ShowBalloon("检查更新异常：" + ex.Message); });
+                    _checkingUpdate = false;
+                }
+            });
+        }
+
+        private void Post(Action a)
+        {
+            if (_sync != null) _sync.Post(_ => a(), null);
+            else a();
+        }
+
+        /// <summary>交给更新器之前，先安静退出，避免托盘点不开、进程不退。</summary>
+        private void ShutdownForUpdate()
+        {
+            try { _tick?.Stop(); } catch { }
+            try { _watchdog?.Stop(); } catch { }
+            try { _tray.Visible = false; _tray.Dispose(); } catch { }
+            try { _console?.Close(); } catch { }
+            try { _server?.Dispose(); } catch { }
+            try { _sampler?.Dispose(); } catch { }
+            try { _load?.Dispose(); } catch { }
+            try { _win?.Dispose(); } catch { }
+            Environment.Exit(0);
         }
 
         /* ------------------------------------------------------------ 其他 */
@@ -430,6 +591,9 @@ namespace AuraWall
             try { _tick?.Stop(); _watchdog?.Stop(); } catch { }
             try { _tray.Visible = false; _tray.Dispose(); } catch { }
             try { _load?.Dispose(); } catch { }
+            try { _console?.Close(); } catch { }
+            try { _server?.Dispose(); } catch { }
+            try { _sampler?.Dispose(); } catch { }
             try { _win?.Dispose(); } catch { }
             ExitThread();
         }

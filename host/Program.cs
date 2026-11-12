@@ -19,6 +19,20 @@ namespace AuraWall
                 return TrayMenuCheck.Run(args.Length > 1 ? args[1] : null);
             }
 
+            // 更新器模式：等旧进程退出后替换文件并重启
+            if (args.Length >= 4 && args[0] == "--apply")
+            {
+                int pid;
+                int.TryParse(args[3], out pid);
+                return Updater.Apply(args[1], args[2], pid);
+            }
+
+            // 只检查更新（自检/排查用）
+            if (args.Length > 0 && args[0] == "--updatecheck")
+            {
+                return UpdateCheck.Run(args.Length > 1 ? args[1] : null, args.Length > 2 ? args[2] : null);
+            }
+
             bool windowed = Array.IndexOf(args, "--windowed") >= 0;
 
             using (var mutex = new Mutex(true, @"Local\AURA_Wallpaper_Single", out bool created))
